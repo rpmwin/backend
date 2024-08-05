@@ -16,6 +16,10 @@ const games = new Map();
 wss.on("connection", (ws) => {
     console.log("User connected");
 
+    const temp_id = Math.floor(Math.random() * 1000);
+    users.set(temp_id, ws);
+    ws.send(JSON.stringify({ type: "user_ID", message: temp_id }));
+
     // Auto-register users as 'X' or 'O'
     let userSymbol = "X";
 
@@ -60,51 +64,17 @@ wss.on("connection", (ws) => {
 
         switch (data.type) {
             case "register": {
-                if (users.size === 0) {
-                    userSymbol = "X"; // First player gets 'X'
-                } else if (users.size === 1) {
-                    userSymbol = "O"; // Second player gets 'O'
-                } else {
-                    ws.send(
-                        JSON.stringify({
-                            type: "error",
-                            message: "Cannot register more than 2 players",
-                        })
-                    );
-                    break;
-                }
-
-                const userId = userSymbol;
-                users.set(userId, ws);
-                ws.send(
-                    JSON.stringify({
-                        type: "success",
-                        message: "User registered",
-                        userId: userId,
-                    })
-                );
                 break;
             }
 
             case "create_game": {
-                const userId = getUserSymbol(ws);
-                if (!userId) {
-                    ws.send(
-                        JSON.stringify({
-                            type: "error",
-                            message: "User not registered",
-                        })
-                    );
-                    break;
-                }
-
                 const gameId = Math.floor(Math.random() * 1000);
 
                 const newGame = {
                     id: gameId,
-                    players: [userId],
+                    players: [data.userId],
                     board: Array.from({ length: 6 }, () => Array(7).fill(null)),
-                    currentPlayer: userId,
+                    currentPlayer: data.userId,
                 };
 
                 games.set(gameId, newGame);
@@ -119,18 +89,11 @@ wss.on("connection", (ws) => {
             }
 
             case "join_game": {
-                const userId = getUserSymbol(ws);
-                if (!userId) {
-                    ws.send(
-                        JSON.stringify({
-                            type: "error",
-                            message: "User not registered",
-                        })
-                    );
-                    break;
-                }
+                const gameId = Number(data.gameId); // Convert gameId to a number
+                console.log("Trying to join game with ID:", gameId);
+                console.log("Available games:", Array.from(games.keys())); // Log all available game IDs
 
-                const gameToJoin = games.get(data.gameId);
+                const gameToJoin = games.get(gameId);
                 if (!gameToJoin) {
                     ws.send(
                         JSON.stringify({
@@ -143,42 +106,39 @@ wss.on("connection", (ws) => {
 
                 if (
                     gameToJoin.players.length < 2 &&
-                    !gameToJoin.players.includes(userId)
+                    !gameToJoin.players.includes(data.userId)
                 ) {
-                    gameToJoin.players.push(userId);
+                    // let newUser = Number(data.userId);
 
-                    gameToJoin.players.forEach((player) => {
-                        users.get(player).send(
+                    gameToJoin.players.push(data.userId);
+
+                    console.log("Game joined:", gameToJoin);
+
+
+                    gameToJoin.players.forEach((player, index) => {
+                        const playerNumber = Number(player);
+                        users.get(playerNumber).send(
                             JSON.stringify({
                                 type: "success",
                                 message: "Game joined",
                                 game: gameToJoin,
+                                playing: index === 0 ? "X" : "O",
                             })
                         );
                     });
 
                     games.set(data.gameId, gameToJoin);
 
-                    ws.send(
-                        JSON.stringify({
-                            type: "success",
-                            message: "Game joined",
-                            game: gameToJoin,
-                        })
-                    );
-
                     gameToJoin.players.forEach((player) => {
-                        if (player !== userId) {
-                            users.get(player).send(
-                                JSON.stringify({
-                                    type: "current_player",
-                                    message:
-                                        gameToJoin.currentPlayer === player
-                                            ? true
-                                            : false,
-                                })
-                            );
-                        }
+                        users.get(player).send(
+                            JSON.stringify({
+                                type: "current_player",
+                                message:
+                                    gameToJoin.currentPlayer === player
+                                        ? true
+                                        : false,
+                            })
+                        );
                     });
 
                     break;
@@ -194,17 +154,6 @@ wss.on("connection", (ws) => {
             }
 
             case "make_move": {
-                const userId = getUserSymbol(ws);
-                if (!userId) {
-                    ws.send(
-                        JSON.stringify({
-                            type: "error",
-                            message: "User not registered",
-                        })
-                    );
-                    break;
-                }
-
                 const game = games.get(data.gameId);
                 if (!game) {
                     ws.send(
@@ -216,7 +165,7 @@ wss.on("connection", (ws) => {
                     break;
                 }
 
-                if (game.currentPlayer !== userId) {
+                if (game.currentPlayer !== data.userId) {
                     ws.send(
                         JSON.stringify({
                             type: "error",
@@ -243,7 +192,7 @@ wss.on("connection", (ws) => {
                     break;
                 }
 
-                game.board[row][col] = userId;
+                game.board[row][col] = data.symbol;
 
                 const winner = checkWinner(game.board);
                 if (winner) {
@@ -273,7 +222,7 @@ wss.on("connection", (ws) => {
                 // Switch the current player
                 game.currentPlayer =
                     game.players[
-                        (game.players.indexOf(userId) + 1) % game.players.length
+                        (game.players.indexOf(data.userId) + 1) % game.players.length
                     ];
 
                 game.players.forEach((player) => {
