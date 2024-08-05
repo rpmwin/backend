@@ -13,7 +13,6 @@ const port = process.env.PORT || 3000;
 const users = new Map();
 const games = new Map();
 
-
 wss.on("connection", (ws) => {
     console.log("User connected");
 
@@ -99,7 +98,7 @@ wss.on("connection", (ws) => {
                     break;
                 }
 
-                const gameId = Math.random().toString(36).substring(2, 9);
+                const gameId = Math.floor(Math.random() * 1000);
 
                 const newGame = {
                     id: gameId,
