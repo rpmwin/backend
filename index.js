@@ -5,7 +5,10 @@ import { createServer } from "http";
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
-const port = 8000;
+
+// configure env
+
+const port = process.env.PORT || 3000;
 
 const users = new Map();
 const games = new Map();
